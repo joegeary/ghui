@@ -59,7 +59,7 @@ bun run dev
 
 ## Configuration
 
-- `GHUI_PR_FETCH_LIMIT`: max PRs fetched, defaults to `200`
+- `GHUI_PR_FETCH_LIMIT`: max PRs fetched, defaults to `500`
 - `GHUI_RUN_FETCH_LIMIT`: max workflow runs fetched per PR, defaults to `20`
 
 Example:
