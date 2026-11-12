@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { act } from "react"
 
 // Quiet React's "update outside act" warnings from atom-driven loading frames and
@@ -30,7 +32,7 @@ console.error = (...args: unknown[]) => {
 // limited to test-only modules — App is dynamically imported.
 process.env.GHUI_MOCK_PR_COUNT = "80"
 process.env.GHUI_MOCK_REPO_COUNT = "4"
-process.env.GHUI_MOCK_FIXTURE_PATH = "/var/folders/dd/5fz89drs5p9_r0fk7rwqqnbr0000gn/T/opencode/ghui-test-no-fixture.json"
+process.env.GHUI_MOCK_FIXTURE_PATH = join(tmpdir(), "ghui-test-no-fixture.json")
 process.env.GHUI_MOCK_WORKSPACE_PREFERENCES_PATH = "off"
 process.env.GHUI_PR_PAGE_SIZE = "100"
 
