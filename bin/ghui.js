@@ -28,6 +28,10 @@ Terminal UI for GitHub pull requests.
 
 Usage:
   ghui              Start the TUI
+  ghui --pr [target]
+                    Open one pull request. The target is a GitHub pull
+                    request URL or owner/repo#number. Without a target,
+                    open the pull request for the current branch
   ghui upgrade      Upgrade ghui to the latest npm release
   ghui -v, --version
                     Print the installed version
