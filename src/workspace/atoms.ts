@@ -1,12 +1,12 @@
 import * as Atom from "effect/unstable/reactivity/Atom"
 import { CacheService, type RepoRollupRow } from "../services/CacheService.js"
-import { githubRuntime, initialRecentRepositories } from "../services/runtime.js"
+import { githubRuntime, initialRecentRepositories, startupRepository } from "../services/runtime.js"
 import type { ViewerId, WorkspacePreferences } from "../workspacePreferences.js"
 import { repositoryWorkspaceSurfaces, userWorkspaceSurfaces, type WorkspaceSurface } from "../workspaceSurfaces.js"
-import { userWorkspaceScope, workspaceScopeRepository, type WorkspaceScope } from "../workspaceScope.js"
+import { workspaceScopeForRepository, workspaceScopeRepository, type WorkspaceScope } from "../workspaceScope.js"
 
 export const workspaceSurfaceAtom = Atom.make<WorkspaceSurface>("pullRequests")
-export const workspaceScopeAtom = Atom.make<WorkspaceScope>(userWorkspaceScope).pipe(Atom.keepAlive)
+export const workspaceScopeAtom = Atom.make<WorkspaceScope>(workspaceScopeForRepository(startupRepository)).pipe(Atom.keepAlive)
 export const selectedRepositoryAtom = Atom.make((get) => workspaceScopeRepository(get(workspaceScopeAtom)))
 export const selectedRepositoryIndexAtom = Atom.make(0)
 export const favoriteRepositoriesAtom = Atom.make<Record<string, true>>({}).pipe(Atom.keepAlive)

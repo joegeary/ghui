@@ -109,11 +109,13 @@ export const useLoadingStatus = ({
 		setStartupLoadComplete(true)
 	}, [startupLoadComplete, pullRequestStatus, setStartupLoadComplete])
 
+	// Not gated on the list status: a pull request pinned from the command line
+	// is selected before the list loads, and stays usable if the list fails.
 	useEffect(() => {
-		if (pullRequestStatus !== "ready" || !selectedPullRequest) return
+		if (!selectedPullRequest) return
 		loadPullRequestComments(selectedPullRequest)
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [pullRequestStatus, selectedPullRequest?.url, selectedPullRequest?.headRefOid, selectedPullRequest?.repository, selectedPullRequest?.number])
+	}, [selectedPullRequest?.url, selectedPullRequest?.headRefOid, selectedPullRequest?.repository, selectedPullRequest?.number])
 
 	return {
 		selectedPullRequestDetailError,

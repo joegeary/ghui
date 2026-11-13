@@ -12,7 +12,7 @@ import { freshIssueLoad } from "../../issueCache.js"
 import { type IssueView, initialIssueView, issueViewCacheKey, issueViewMode, issueViewRepository, issueViewToListInput, issueViewToQuery } from "../../issueViews.js"
 import { CacheService } from "../../services/CacheService.js"
 import { GitHubService } from "../../services/GitHubService.js"
-import { githubRuntime, pullRequestPageSize } from "../../services/runtime.js"
+import { githubRuntime, pullRequestPageSize, startupRepository } from "../../services/runtime.js"
 import { selectedRepositoryAtom, workspaceSurfaceAtom } from "../../workspace/atoms.js"
 import { effectiveFilterQueryAtom } from "../filter/atoms.js"
 import { filterByScore, issueFilterScore } from "../filter/scoring.js"
@@ -25,7 +25,7 @@ import { selectedIssueIndexAtom } from "../listSelection/atoms.js"
 // `src/issueViews.ts`.
 export { initialIssueView, issueViewMode, issueViewRepository, issueViewToQuery, type IssueView }
 
-export const activeIssueViewAtom = Atom.make<IssueView>(initialIssueView(null)).pipe(Atom.keepAlive)
+export const activeIssueViewAtom = Atom.make<IssueView>(initialIssueView(startupRepository)).pipe(Atom.keepAlive)
 export const issueOverridesAtom = Atom.make<Record<string, IssueItem>>({}).pipe(Atom.keepAlive)
 export const issueRetryProgressAtom = Atom.make<RetryProgress>(initialRetryProgress).pipe(Atom.keepAlive)
 

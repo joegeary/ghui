@@ -6,7 +6,7 @@ import type { PullRequestItem } from "../domain.js"
 import { type PullRequestView, nextView, viewCacheKey, viewEquals } from "../pullRequestViews.js"
 import { issueViewForPullRequestView } from "../viewSync.js"
 import { type WorkspaceSurface, nextWorkspaceSurface } from "../workspaceSurfaces.js"
-import { queueSelectionAtom } from "../ui/pullRequests/atoms.js"
+import { pinnedPullRequestAtom, queueSelectionAtom } from "../ui/pullRequests/atoms.js"
 import { recentRepositoriesAtom, workspaceScopeAtom } from "../workspace/atoms.js"
 import type { IssueView } from "../issueViews.js"
 import { workspaceScopeForRepository } from "../workspaceScope.js"
@@ -94,6 +94,7 @@ export const useWorkspaceNavigation = (input: UseWorkspaceNavigationInput): Work
 	} = input
 	const setRecentRepositories = useAtomSet(recentRepositoriesAtom)
 	const setWorkspaceScope = useAtomSet(workspaceScopeAtom)
+	const setPinnedPullRequest = useAtomSet(pinnedPullRequestAtom)
 
 	const switchViewTo = (view: PullRequestView) => {
 		devLog("switchViewTo:enter", { from: activeView, to: view, equal: viewEquals(view, activeView) })
@@ -110,6 +111,7 @@ export const useWorkspaceNavigation = (input: UseWorkspaceNavigationInput): Work
 		setSelectedIndex(registry.get(queueSelectionAtom)[viewCacheKey(view)] ?? 0)
 		setSelectedIssueIndex(0)
 		setRecentlyCompletedPullRequests({})
+		setPinnedPullRequest(null)
 		resetHydration()
 		resetLoadingMore()
 		setDetailFullView(false)

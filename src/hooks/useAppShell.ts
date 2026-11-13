@@ -41,6 +41,7 @@ import { useAppKeymap } from "./useAppKeymap.js"
 import { useModalStack } from "./useModalStack.js"
 import { useItemMutations } from "../item/useItemMutations.js"
 import { useSelectionDerivations } from "./useSelectionDerivations.js"
+import { useStartupPullRequest } from "./useStartupPullRequest.js"
 import { useStartupTasks } from "./useStartupTasks.js"
 import { usePasteRouter } from "./usePasteRouter.js"
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation.js"
@@ -64,7 +65,7 @@ import { useDiffCommentDerivations } from "./useDiffCommentDerivations.js"
 import { useDiffCommentNavigator } from "./useDiffCommentNavigator.js"
 import { useItemModalActions } from "../item/useItemModalActions.js"
 import { repositoryWorkspaceSurfaces, userWorkspaceSurfaces, type WorkspaceSurface } from "../workspaceSurfaces.js"
-import { detectedRepository, mockRepositoryCatalog, mockWorkspacePreferencesPath } from "../services/runtime.js"
+import { detectedRepository, mockRepositoryCatalog, mockWorkspacePreferencesPath, startupPullRequestRequest } from "../services/runtime.js"
 
 export interface UseAppShellInput {
 	readonly systemThemeGeneration: number
@@ -522,6 +523,15 @@ export const useAppShell = ({ systemThemeGeneration }: UseAppShellInput) => {
 		setQueueSelection,
 		issues,
 		pullRequests,
+	})
+
+	useStartupPullRequest({
+		request: startupPullRequestRequest,
+		activeView,
+		visiblePullRequests,
+		switchViewTo,
+		selectPullRequestByUrl,
+		flashNotice,
 	})
 
 	// Keep list scroll position when toggling between surfaces. Each list's

@@ -11,10 +11,11 @@ import { retryItemQueueFirstPage } from "../../item/retry.js"
 import { freshPullRequestLoad, mergePullRequestDetail } from "../../pullRequestCache.js"
 export { nextLoadAfterPage } from "../../pullRequestCache.js"
 import type { PullRequestLoad } from "../../pullRequestLoad.js"
+import type { StartupPullRequestRequest } from "../../pullRequestTarget.js"
 import { activePullRequestViews, initialPullRequestView, type PullRequestView, viewCacheKey, viewRepository, viewToListInput } from "../../pullRequestViews.js"
 import { CacheService } from "../../services/CacheService.js"
 import { GitHubService } from "../../services/GitHubService.js"
-import { githubRuntime, pullRequestPageSize } from "../../services/runtime.js"
+import { githubRuntime, pullRequestPageSize, startupRepository } from "../../services/runtime.js"
 import { effectiveFilterQueryAtom } from "../filter/atoms.js"
 import { filterByScore, pullRequestFilterScore } from "../filter/scoring.js"
 import { initialRetryProgress, RetryProgress } from "../FooterHints.js"
@@ -29,6 +30,9 @@ export const repoMergeMethodsCacheAtom = Atom.make<Record<string, RepositoryMerg
 export const lastUsedMergeMethodAtom = Atom.make<Record<string, PullRequestMergeMethod>>({}).pipe(Atom.keepAlive)
 export const pullRequestOverridesAtom = Atom.make<Record<string, PullRequestItem>>({}).pipe(Atom.keepAlive)
 export const recentlyCompletedPullRequestsAtom = Atom.make<Record<string, PullRequestItem>>({}).pipe(Atom.keepAlive)
+// The one pull request opened from the command line. It joins the active list
+// when the loaded pages do not contain it, and view changes drop it.
+export const pinnedPullRequestAtom = Atom.make<PullRequestItem | null>(null).pipe(Atom.keepAlive)
 export const repositoryDetailsCacheAtom = Atom.make<Record<string, RepositoryDetails>>({}).pipe(Atom.keepAlive)
 
 // === Atom-key helpers (shared with diff atoms) ===
@@ -50,7 +54,7 @@ const trimQueueLoadCache = (cache: Partial<Record<string, PullRequestLoad>>) => 
 
 // === View / queue state atoms ===
 export const retryProgressAtom = Atom.make<RetryProgress>(initialRetryProgress).pipe(Atom.keepAlive)
-export const activeViewAtom = Atom.make<PullRequestView>(initialPullRequestView(null)).pipe(Atom.keepAlive)
+export const activeViewAtom = Atom.make<PullRequestView>(initialPullRequestView(startupRepository)).pipe(Atom.keepAlive)
 export const queueLoadCacheAtom = Atom.make<Partial<Record<string, PullRequestLoad>>>({}).pipe(Atom.keepAlive)
 export const queueSelectionAtom = Atom.make<Partial<Record<string, number>>>({}).pipe(Atom.keepAlive)
 
@@ -173,6 +177,9 @@ export const pullRequestDetailsForRevision = Atom.family((revisionKey: string) =
 					yield* Atom.update(recentlyCompletedPullRequestsAtom, (completed) => applyCompletedPullRequestDetail(completed, cached))
 				}
 				const detail = yield* github.getPullRequestDetails(repository, number)
+				// No list page refreshes a pinned pull request, so a fresh detail
+				// replaces it even when the head has moved past this revision.
+				yield* Atom.update(pinnedPullRequestAtom, (pinned) => (pinned?.url === detail.url ? detail : pinned))
 				if (pullRequestRevisionAtomKey(detail) !== revisionKey) return detail
 				const loads = yield* Atom.get(queueLoadCacheAtom)
 				const completed = yield* Atom.get(recentlyCompletedPullRequestsAtom)
@@ -188,6 +195,18 @@ export const pullRequestDetailsForRevision = Atom.family((revisionKey: string) =
 			}),
 		)
 		.pipe(Atom.setIdleTTL(0)),
+)
+
+export type StartupPullRequest = { readonly _tag: "Found"; readonly pullRequest: PullRequestItem } | { readonly _tag: "NotFound"; readonly branch: string }
+
+export const resolveStartupPullRequestAtom = githubRuntime.fn<StartupPullRequestRequest>()((request) =>
+	Effect.gen(function* () {
+		const github = yield* GitHubService
+		const lookup = request._tag === "Explicit" ? ({ _tag: "Found", target: request.target } as const) : yield* github.getCurrentBranchPullRequest()
+		if (lookup._tag === "NotFound") return lookup satisfies StartupPullRequest
+		const pullRequest = yield* github.getPullRequestDetails(lookup.target.repository, lookup.target.number)
+		return { _tag: "Found", pullRequest } satisfies StartupPullRequest
+	}),
 )
 
 export const writeQueueCacheAtom = githubRuntime.fn<{ readonly viewer: string; readonly load: PullRequestLoad }>()(({ viewer, load }) =>
@@ -283,6 +302,7 @@ export const displayedPullRequestsAtom = Atom.make((get) => {
 	const load = get(queueLoadCacheAtom)[viewCacheKey(view)] ?? null
 	const overrides = get(pullRequestOverridesAtom)
 	const recentlyCompleted = get(recentlyCompletedPullRequestsAtom)
+	const pinned = get(pinnedPullRequestAtom)
 	const scope = viewRepository(view)
 	devLog("displayedPullRequestsAtom", {
 		view,
@@ -299,15 +319,23 @@ export const displayedPullRequestsAtom = Atom.make((get) => {
 	// under the new breadcrumb.
 	const inScope = (pullRequest: PullRequestItem) => scope === null || pullRequest.repository === scope
 	const source = (load?.data ?? []).filter(inScope)
+	// Mutations write overrides and completions by URL, so every row resolves through both.
+	const current = (pullRequest: PullRequestItem) => recentlyCompleted[pullRequest.url] ?? overrides[pullRequest.url] ?? pullRequest
 	const seenUrls = new Set<string>()
 	const open = source.map((pullRequest) => {
 		seenUrls.add(pullRequest.url)
-		return recentlyCompleted[pullRequest.url] ?? overrides[pullRequest.url] ?? pullRequest
+		// A list page carries summaries only. Keep the detail the pin already
+		// holds so an open detail view does not blank while it rehydrates.
+		const withDetail =
+			pinned?.url === pullRequest.url && !pullRequest.detailLoaded && pinned.headRefOid === pullRequest.headRefOid ? mergePullRequestDetail(pullRequest, pinned) : pullRequest
+		return current(withDetail)
 	})
+	const pinnedOutsideLoad = pinned && inScope(pinned) && !seenUrls.has(pinned.url) ? [current(pinned)] : []
+	for (const pullRequest of pinnedOutsideLoad) seenUrls.add(pullRequest.url)
 	const orphans = Object.values(recentlyCompleted).filter((pullRequest) => inScope(pullRequest) && !seenUrls.has(pullRequest.url))
 	// Sort by updatedAt DESC. Server already sorts this way, but pagination
 	// drift and merged orphans can scramble the order — guarantee it here.
-	return [...open, ...orphans].sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+	return [...open, ...pinnedOutsideLoad, ...orphans].sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
 })
 
 export const filteredPullRequestsAtom = Atom.make((get) => {
