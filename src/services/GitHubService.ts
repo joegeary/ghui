@@ -17,6 +17,7 @@ import {
 } from "../domain.js"
 import { type ItemListInput, type ItemPage, searchQualifier } from "../item.js"
 import { mergeActionCliArgs } from "../mergeActions.js"
+import { type CurrentBranchPullRequest, parsePullRequestTarget } from "../pullRequestTarget.js"
 import { CommandError, CommandRunner, commandTelemetryAttributes, type JsonParseError } from "./CommandRunner.js"
 import {
 	fallbackCreatedComment,
@@ -42,6 +43,7 @@ import {
 } from "./githubNormalize.js"
 import {
 	CommentsResponseSchema,
+	CurrentBranchPullRequestSchema,
 	issueSearchQuery,
 	MergeInfoResponseSchema,
 	PullRequestAdminMergeResponseSchema,
@@ -73,6 +75,10 @@ const repositoryParts = (repository: string) => {
 
 export type GitHubError = CommandError | JsonParseError | Schema.SchemaError
 
+// `gh pr view` exits non-zero with this message when the branch has no pull
+// request. It is the only signal that separates that case from a real failure.
+const branchWithoutPullRequest = (error: GitHubError) => (error._tag === "CommandError" ? (error.detail.match(/no pull requests found for branch "(.*)"/)?.[1] ?? null) : null)
+
 const REVIEW_EVENT_CLI_FLAG = {
 	COMMENT: "--comment",
 	APPROVE: "--approve",
@@ -87,6 +93,7 @@ export class GitHubService extends Context.Service<
 		readonly listAllPullRequests: (input: Omit<ItemListInput<"pullRequest">, "cursor" | "pageSize">) => Effect.Effect<readonly PullRequestItem[], GitHubError>
 		readonly listAllIssues: (input: Omit<ItemListInput<"issue">, "cursor" | "pageSize">) => Effect.Effect<readonly IssueItem[], GitHubError>
 		readonly getPullRequestDetails: (repository: string, number: number) => Effect.Effect<PullRequestItem, GitHubError>
+		readonly getCurrentBranchPullRequest: () => Effect.Effect<CurrentBranchPullRequest, GitHubError>
 		readonly getRepositoryDetails: (repository: string) => Effect.Effect<RepositoryDetails, GitHubError>
 		readonly getAuthenticatedUser: () => Effect.Effect<string, GitHubError>
 		readonly getPullRequestDiff: (repository: string, number: number) => Effect.Effect<string, GitHubError>
@@ -259,6 +266,22 @@ export class GitHubService extends Context.Service<
 					return yield* new CommandError({ command: "gh", args: [], detail: `Pull request not found: ${repository}#${number}`, cause: `${repository}#${number}` })
 				}
 				return parsePullRequest(pullRequest)
+			})
+
+			const getCurrentBranchPullRequest = Effect.fn("GitHubService.getCurrentBranchPullRequest")(function* () {
+				const args = ["pr", "view", "--json", "url"]
+				return yield* ghJson("getCurrentBranchPullRequest", CurrentBranchPullRequestSchema, args).pipe(
+					Effect.flatMap((view): Effect.Effect<CurrentBranchPullRequest, GitHubError> => {
+						const target = parsePullRequestTarget(view.url)
+						return target
+							? Effect.succeed({ _tag: "Found", target })
+							: Effect.fail(new CommandError({ command: "gh", args, detail: `Unexpected pull request URL: ${view.url}`, cause: view.url }))
+					}),
+					Effect.catch((error): Effect.Effect<CurrentBranchPullRequest, GitHubError> => {
+						const branch = branchWithoutPullRequest(error)
+						return branch === null ? Effect.fail(error) : Effect.succeed({ _tag: "NotFound", branch })
+					}),
+				)
 			})
 
 			const authenticatedUser = yield* ghJson("getAuthenticatedUser", ViewerSchema, ["api", "user"]).pipe(
@@ -497,6 +520,7 @@ export class GitHubService extends Context.Service<
 				listAllPullRequests,
 				listAllIssues,
 				getPullRequestDetails,
+				getCurrentBranchPullRequest,
 				getRepositoryDetails,
 				getAuthenticatedUser,
 				getPullRequestDiff,

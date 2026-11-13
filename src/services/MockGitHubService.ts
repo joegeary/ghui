@@ -13,6 +13,8 @@ import type {
 } from "../domain.js"
 import type { ItemListInput } from "../item.js"
 import { mergeInfoFromPullRequest } from "../mergeActions.js"
+import type { PullRequestTarget } from "../pullRequestTarget.js"
+import { CommandError } from "./CommandRunner.js"
 import { mockAuthor, mockBody, mockIssueTitle, mockLabels, mockPullRequestBranch, mockPullRequestTitle } from "./mockData.js"
 import { mockWorkflowRunDetails, mockWorkflowRuns } from "./mockRuns.js"
 import { GitHubService } from "./GitHubService.js"
@@ -26,6 +28,12 @@ export interface MockOptions {
 	readonly username?: string
 	readonly seed?: number
 }
+
+export interface MockServiceOptions extends MockOptions {
+	readonly currentBranchPullRequest?: PullRequestTarget | null
+}
+
+const MOCK_CURRENT_BRANCH = "mock-branch"
 
 const REVIEW_CYCLE: readonly ReviewStatus[] = ["approved", "changes", "review", "none", "draft"]
 const MERGEABLE_CYCLE: readonly Mergeable[] = ["mergeable", "conflicting", "unknown"]
@@ -166,7 +174,7 @@ const uniqueLabels = (items: readonly { readonly labels: readonly { readonly nam
 }
 
 export const MockGitHubService = {
-	layer: (options: MockOptions) => {
+	layer: (options: MockServiceOptions) => {
 		const fixture = loadMockFixtureSnapshot()
 		const strictUserScope = fixture !== null
 		const username = options.username ?? "mock-user"
@@ -200,6 +208,11 @@ export const MockGitHubService = {
 		const fixturePullRequest = (repository: string, number: number) => fixturePullRequestsByKey.get(`${repository}#${number}`) ?? null
 		const fixtureIssue = (repository: string, number: number) => fixtureIssuesByKey.get(`${repository}#${number}`) ?? null
 		const findPullRequest = (repository: string, number: number) => [...items, ...userItems].find((item) => item.repository === repository && item.number === number) ?? items[0]!
+		// GitHub resolves repository names case-insensitively and answers with the canonical spelling.
+		const lookUpPullRequest = (repository: string, number: number) => {
+			const wanted = repository.toLowerCase()
+			return [...items, ...userItems].find((item) => item.repository.toLowerCase() === wanted && item.number === number) ?? null
+		}
 		const labelsForRepository = (repository: string) =>
 			uniqueLabels([...items.filter((item) => item.repository === repository), ...issues.filter((issue) => issue.repository === repository)])
 		const comments = (repository: string, number: number): readonly PullRequestComment[] => [
@@ -272,7 +285,16 @@ export const MockGitHubService = {
 		return Layer.succeed(
 			GitHubService,
 			GitHubService.of({
-				getPullRequestDetails: (repository, number) => Effect.succeed(findPullRequest(repository, number)),
+				getPullRequestDetails: (repository, number) => {
+					const pullRequest = lookUpPullRequest(repository, number)
+					return pullRequest
+						? Effect.succeed(pullRequest)
+						: Effect.fail(new CommandError({ command: "gh", args: [], detail: `Pull request not found: ${repository}#${number}`, cause: `${repository}#${number}` }))
+				},
+				getCurrentBranchPullRequest: () =>
+					Effect.succeed(
+						options.currentBranchPullRequest ? { _tag: "Found" as const, target: options.currentBranchPullRequest } : { _tag: "NotFound" as const, branch: MOCK_CURRENT_BRANCH },
+					),
 				getRepositoryDetails: (repository: string) => {
 					const seed = Array.from(repository).reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 0)
 					const openIssueCount = issues.filter((issue) => issue.repository === repository).length

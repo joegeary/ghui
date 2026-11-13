@@ -134,6 +134,8 @@ export const RepositoryPullRequestsResponseSchema = Schema.Struct({
 
 export const ViewerSchema = Schema.Struct({ login: Schema.String })
 
+export const CurrentBranchPullRequestSchema = Schema.Struct({ url: Schema.String })
+
 export const RepositoryMergeMethodsResponseSchema = Schema.Struct({
 	squashMergeAllowed: Schema.Boolean,
 	mergeCommitAllowed: Schema.Boolean,
