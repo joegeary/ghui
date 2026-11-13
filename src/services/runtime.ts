@@ -21,6 +21,9 @@ export const mockPrCount = parseOptionalPositiveInt(process.env.GHUI_MOCK_PR_COU
 export const mockRepository = process.env.GHUI_MOCK_REPOSITORY?.trim() || null
 export const detectedRepository = mockPrCount === null ? detectCurrentGitHubRepository() : mockRepository
 export const startupPullRequestRequest = parseStartupPullRequestRequest(process.env.GHUI_PR)
+// Read once. Left set, every process ghui spawns (editor, shells) would inherit
+// it and a ghui started there would reopen this pull request.
+delete process.env.GHUI_PR
 // The repository the app opens scoped to, so the list behind a startup pull
 // request is already the right one when its detail view closes.
 export const startupRepository =
