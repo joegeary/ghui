@@ -38,6 +38,27 @@ Run it from anywhere:
 ghui
 ```
 
+## Open one pull request
+
+Pass `--pr` to start in a pull request's detail view:
+
+```bash
+ghui --pr https://github.com/kitlangton/ghui/pull/68
+ghui --pr kitlangton/ghui#68
+ghui --pr
+```
+
+The target is a GitHub pull request URL or `owner/repo#number`. It can be open,
+closed, or merged. Without a target, ghui opens the pull request for the current
+branch of the working directory. If that branch has no pull request, ghui shows
+the repository's pull request list.
+
+Press `esc` to close the detail view. ghui shows the repository's pull request
+list with that pull request selected.
+
+When you run ghui from source, set `GHUI_PR` instead: `GHUI_PR=owner/repo#68 bun run dev`.
+Use `GHUI_PR=current` for the current branch.
+
 ## Local Development
 
 Clone, install, and link:
